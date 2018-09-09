@@ -1,0 +1,145 @@
+---
+title: "The impact of forced phone-in to cancellation"
+author: "Maryam"
+date: "September 9, 2018"
+output: word_document
+---
+Call the datasets and reviwe them:
+
+```{r}
+dataset1 <- read.csv("testSamples.csv")
+dataset2 <- read.csv("transData.csv")
+merged.data = dataset2
+summary(merged.data)
+str(merged.data)
+```
+
+Split dataset into "control set" and "test set
+
+```{r, warning=FALSE}
+library(caTools)
+set.seed(123)
+split.data.set <- split(merged.data, merged.data$test_group)
+control.group <- split.data.set$"0"
+test.group <- split.data.set$"1"
+```
+
+**Question 1:**
+What is the approximate probability distribution between the test group and the control group?
+The assumption is made that the responses from each group follow a binomial distribution. 
+If n is large enough, then the skew of the distribution is not too great. 
+In this case, a reasonable approximation to binomial distribution is given by the normal distribution.
+
+```{r}
+plot(density(merged.data$test_group), main = "test_group", col="blue")
+```
+
+**Question 2:** 
+Is a user that must call-in to cancel more likely to generate at least 1 addition REBILL?
+This is a conditional probability, it means that how probable one event is given that some other event occurred.(Bayes' Theorem). 
+In this case, the happening of REBILL will be occred based on call-in.
+
+```{r}
+call.in <- c(table(test.group$transaction_type))
+no.call.in <- c(table(control.group$transaction_type))
+event.matrix <- rbind(call.in,no.call.in)
+p.rebill.call <- event.matrix[1, 2]/sum(event.matrix[1, ] )
+p.rebill.call
+p.cancel.call <- (event.matrix[1, 1]+event.matrix[1, 3])/sum(event.matrix[1, ] )
+p.cancel.call
+```
+
+Comparing the probability of REBILL condition to call (p.rebill.call=0.95) with CANCEL (sume of CHARGEBACK and REFUND) condition to call (p.cancel.call=0.052), it is more likey that the forced usrs to generate REBILL.
+
+**Question 3:**
+Is a user that must call-in to cancel more likely to generate more revenues?
+To answer this question, two methods are applied. Both methods verify the same answer.
+Test 1: prop.test 
+In this test the null hypothesis is probabilities of success in two groups are the same.
+
+```{r}
+table(control.group$transaction_type)/nrow(control.group)
+table(test.group$transaction_type)/nrow(test.group)
+merged.data2 = merged.data
+merged.data2$transaction_type = ifelse(merged.data2$transaction_type =="CHARGEBACK" | 
+                                         merged.data2$transaction_type == "REFUND", "cancel","REBILL")
+
+x <- table(merged.data2$test_group,merged.data2$transaction_type)[,c(2,1)]
+prop.test(x, conf.level = .95)
+```
+
+The answer is YES, if the customer calls is more likely to have REBILL, it means generating revenue. The probability that a customer REBILL by website is prop 1 that equals 0.93 and the probabilty that a customer REBILL by call is prop 2 0.95
+
+Test 2: ANOVA
+The effect of transaction_type is considerd to transaction_amount for both control_group and test_group
+
+```{r}
+tr.control.g = lm(formula = transaction_amount ~ transaction_type,
+                  data = control.group)
+
+summary(tr.control.g)
+
+tr.test.g = lm(formula = transaction_amount ~ transaction_type,
+                  data = test.group)
+summary(tr.test.g)
+```
+
+In this analysis, transaction_amoun is considered as dependent variabl and transaction_tye as independent variable.
+The result shows that the coeffecint of transaction_type = REFUND in test.group(call-in) has a highly significant effect on transaction_amount.
+P-value is too small and less than 5%. So the null hypothesis (no effect) is rejected.
+The answer is YES, if the customer calls is more likely to have REBILL, it means generating revenue.
+
+**Question 4:** 
+Is a user that must call-in more likely to produce a higher chargeback rate (CHARGEBACKs/REBILLs)?
+H0: p1(web & CHARGEBACKs/REBILLs) = p2(call & CHARGEBACKs/REBILLs)
+H1: p1 < p2
+This question is opposite of previous question.
+
+```{r}
+table(merged.data$test_group,merged.data$transaction_type)
+prop.test(c(106, 57), c(3756, 3205), conf.level = .95,alternative = "less")
+```
+
+The answer is NO. p-value is larg and it is not less than 0.05. So the null hypothesis is  rejected.
+p1 = 0.02822151 > p2= 0.01778471 
+
+**Visualization of data sets**
+
+Box Plot is a conveniente way to show information about key values, outliers, and how tightily the data grouped. Box Plot is depicted for whole dataset and splited dataset.
+
+```{r}
+library(ggplot2)
+u <- ggplot(data=merged.data, aes(x=transaction_type, y= transaction_amount,
+                                  colour=transaction_type))
+u + ggtitle("Transaction")+ geom_jitter() + geom_boxplot(alpha=0.5)
+```
+
+The histogram graph for transaction amount is depicted:
+
+```{r}
+hist(merged.data$transaction_amount, 
+     main="Histogram for Transaction_amount", 
+     xlab="Transaction_amount", 
+     border="blue", 
+     col="green")
+
+```
+
+The last graphs are comparison between three types of transction in splited datasets. These Box Plots confirm the previous results. The graph "Transaction in test" shows the REFUND and CHARGBACK are significanty less than the graph "Transaction in control group".
+
+```{r}
+c <- ggplot(data=control.group, aes(x=transaction_type, y= transaction_amount,
+                                    colour=transaction_type))
+c + ggtitle("Transaction in control group")+ geom_jitter()+ geom_boxplot(alpha=0.5) 
+
+
+t <- ggplot(data=test.group, aes(x=transaction_type, y= transaction_amount,
+                                 colour=transaction_type))
+t + ggtitle("Transaction in test group")+ geom_jitter()+ geom_boxplot(alpha=0.5)
+
+```
+
+In conclusion, the experiments show forcing members to phone-in to customer service line to cancel has positive effect on the transaction type of REBILL and can generate more revenue for the company. 
+
+
+
